@@ -1,0 +1,131 @@
+# Implementation Plan
+
+- [x] 1. Set up project structure and dependencies
+  - Create project directory structure with modules for fetcher, parser, indexer, queue_manager, rate_limiter, and crawler_engine
+  - Create requirements.txt with aiohttp, beautifulsoup4, aiosqlite, and development dependencies
+  - Create main.py as the CLI entry point
+  - Set up basic logging configuration
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+
+- [ ] 2. Implement Queue Manager component
+  - Create QueueManager class with asyncio.Queue for URL management
+  - Implement __init__ method accepting start_url, max_depth, and allowed_domain parameters
+  - Implement get_next_url method to dequeue URLs with depth tracking
+  - Implement add_urls method with URL normalization and duplicate checking
+  - Implement mark_visited method and visited set tracking
+  - Implement is_empty and get_stats methods
+  - Add domain filtering logic to respect allowed_domain constraint
+  - Add depth limiting logic to respect max_depth constraint
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+
+- [ ] 3. Implement Rate Limiter component
+  - Create RateLimiter class with token bucket algorithm
+  - Implement __init__ method accepting requests_per_second parameter
+  - Implement acquire method with per-domain rate tracking
+  - Use asyncio.sleep for rate limiting delays
+  - Store last request timestamp per domain in dictionary
+  - _Requirements: 5.4, 5.5_
+
+- [ ] 4. Implement Fetcher component
+  - Create FetchResult dataclass with url, success, status_code, content, error, and fetch_time fields
+  - Create Fetcher class with aiohttp.ClientSession
+  - Implement __init__ method with timeout and max_retries parameters
+  - Implement fetch method with HTTP GET request using aiohttp
+  - Add User-Agent header "ConcurrentCrawler/1.0" to requests
+  - Implement retry logic with exponential backoff (1s, 2s, 4s delays)
+  - Add timeout handling for requests exceeding 10 seconds
+  - Add error handling for non-2xx status codes
+  - Check Content-Type header to only fetch HTML content
+  - Limit response size to 10MB
+  - Implement close method to cleanup aiohttp session
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 9.1, 9.2_
+
+- [ ] 5. Implement Parser component
+  - Create ParseResult dataclass with title, text_content, keywords, and links fields
+  - Create Parser class using BeautifulSoup
+  - Implement __init__ method accepting base_url parameter
+  - Implement parse method to extract title from <title> tag
+  - Extract text content from body, excluding <script> and <style> tags
+  - Implement keyword extraction: find top 10 most frequent words excluding stop words
+  - Extract all links from <a href> attributes
+  - Convert relative URLs to absolute using urllib.parse.urljoin
+  - Filter out non-HTTP(S) URLs (mailto:, javascript:, data:, etc.)
+  - Normalize extracted URLs (lowercase scheme/domain, remove fragments)
+  - Add error handling for malformed HTML
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 9.3_
+
+- [ ] 6. Implement Indexer component
+  - Create Indexer class using aiosqlite
+  - Implement __init__ method accepting db_path parameter
+  - Create database schema with pages table (id, url, title, keywords, text_preview, crawled_at, updated_at)
+  - Create indexes on url and crawled_at columns
+  - Implement index_page method with UPSERT logic (INSERT OR REPLACE)
+  - Store keywords as JSON array in database
+  - Store only first 500 characters of text as preview
+  - Implement close method to cleanup database connection
+  - Add error handling for database operations with retry logic
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 9.4_
+
+- [ ] 7. Implement Crawler Engine component
+  - Create CrawlStats dataclass with pages_fetched, pages_failed, pages_indexed, and elapsed_time fields
+  - Create CrawlerEngine class orchestrating all components
+  - Implement __init__ method accepting queue_manager, fetcher, parser, indexer, rate_limiter, and concurrency parameters
+  - Implement _worker coroutine that processes URLs in a loop
+  - In _worker: dequeue URL, fetch page, parse content, index data, add discovered links to queue
+  - Implement crawl method that spawns worker tasks up to concurrency limit
+  - Use asyncio.Semaphore to enforce concurrency limit
+  - Track statistics: pages fetched, failed, indexed
+  - Implement graceful shutdown on SIGINT (Ctrl+C)
+  - Return CrawlStats with elapsed time when crawl completes
+  - _Requirements: 5.1, 5.2, 5.3, 9.5_
+
+- [ ] 8. Implement CLI handler and main entry point
+  - Create main function as CLI entry point
+  - Use argparse to parse command-line arguments
+  - Add required argument: start_url
+  - Add optional arguments: --max-depth, --domain, --concurrency, --rate-limit, --db-path, --timeout
+  - Set default values matching design specification
+  - Configure logging to console with INFO level
+  - Instantiate all components (QueueManager, Fetcher, Parser, Indexer, RateLimiter, CrawlerEngine)
+  - Run crawler using asyncio.run()
+  - Display final statistics: pages fetched, errors, elapsed time
+  - Add --help flag with usage instructions
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 8.3, 8.4, 8.5_
+
+- [ ] 9. Add logging throughout the application
+  - Add logger to each component class
+  - Log each URL fetch at INFO level
+  - Log fetch errors at WARNING level with URL and error details
+  - Log parsing errors at WARNING level
+  - Log database errors at ERROR level
+  - Log progress updates during crawling
+  - _Requirements: 8.1, 8.2_
+
+- [ ] 10. Create project documentation
+  - Create README.md with project overview and features
+  - Add installation instructions to README
+  - Add usage examples with different CLI arguments
+  - Add example output showing crawl statistics
+  - Document configuration options and defaults
+  - Add docstrings to all public classes and methods following PEP 257
+  - Ensure code follows PEP 8 style guidelines
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+
+- [ ]* 11. Write unit tests for core components
+  - Write tests for QueueManager: URL normalization, depth limiting, domain filtering, duplicate prevention
+  - Write tests for Parser: link extraction, relative URL resolution, keyword extraction, malformed HTML handling
+  - Write tests for RateLimiter: delay calculation, per-domain isolation
+  - Write tests for Indexer: schema creation, UPSERT behavior, JSON serialization
+  - Use pytest as testing framework
+  - Add pytest to requirements.txt
+  - _Requirements: All requirements (validation)_
+
+- [ ]* 12. Create integration tests
+  - Create test HTML files for local crawling
+  - Write end-to-end test crawling local file:// URLs
+  - Verify all pages are indexed correctly in test database
+  - Write test for concurrency limit enforcement using mock server
+  - Write test for rate limiting using mock server with delays
+  - Write test for error handling with mock server returning various error codes
+  - Verify crawler continues after errors
+  - _Requirements: All requirements (validation)_
